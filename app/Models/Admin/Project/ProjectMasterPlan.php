@@ -1,0 +1,17 @@
+<?php
+
+namespace App\Models\Admin\Project;
+
+use App\Models\Admin\Typology\SubTypology;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class ProjectMasterPlan extends Model
+{
+    use HasFactory;
+    protected $fillable = ['project_id','heading','image','alternative_image','alt'];
+    protected $table="project_master_plan";
+
+
+}

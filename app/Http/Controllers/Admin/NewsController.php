@@ -1,0 +1,387 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use App\Models\Admin\News;
+use Illuminate\Validation\Rule;
+
+class NewsController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+
+    
+    public function __construct()
+    {
+        $this->middleware('admin.auth');
+    }
+
+
+    public function index(Request $request)
+    {
+
+        $search="";
+        if(!empty($request->search)){
+            $search = $request->search; 
+        }
+        
+        
+        
+        $perPage = $request->input('per_page', 10);
+        $page = $request->input('page', 1);
+
+        $media = News::search($search)
+        ->when($request->type, function ($query, $type) {
+            return $query->where('type', $type);
+        })
+        ->paginate($perPage, ['*'], 'page', $page);
+    
+        return response()->json([
+            'status'=>true,
+            'statusCode'=>200,
+            'message'=>"Success ",
+            'data'=>$media
+        ]);
+
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(),[
+            'file' => ['required',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'docs') {
+                        if ($value->getClientOriginalExtension() !== "pdf") {
+                            $fail('Only PDF files are allowed.');
+                        }
+                    } else {
+                        if (!in_array($value->getClientOriginalExtension(), ['png', 'jpg', 'jpeg', 'webp'])) {
+                            $fail('Invalid file type. Only allowed: png, jpg, jpeg, webp.');
+                        }
+                    }
+                },
+                'max:2048'],
+            'alternative_image' => ['nullable',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'docs') {
+                        if ($value->getClientOriginalExtension() !== "pdf") {
+                            $fail('Only PDF files are allowed.');
+                        }
+                    } else {
+                        if (!in_array($value->getClientOriginalExtension(), ['png', 'jpg', 'jpeg'])) {
+                            $fail('Invalid file type. Only allowed: png, jpg, jpeg.');
+                        }
+                    }
+                },
+            'max:2048'],
+            'type' => 'required|in:logo,docs,news',
+            // 'heading' => [
+            //     'required',
+            //     Rule::unique('news')->whereNull('deleted_at'), // Ignore soft-deleted records
+            // ],
+            'heading' => 'required',
+            'lang' => 'required_if:type,news,|in:hindi,english',
+        ],
+        [
+            'file.required' => 'This field is required.',
+            'file.mimes' => 'Invalid file type only aloowed (png,jpg,jpeg,webp)',
+            // 'alternative_image.required' => 'This field is required.',
+            'alternative_image.mimes' => 'Invalid image type only aloowed (png,jpg,jpeg,webp)',
+            'heading.required' => 'This heading field is required.',
+            // 'heading.unique' => 'heading Already Exists.',
+            'type.in' => 'Invalid type selected.',
+            'lang.required_if' => 'Language field is required.', // Custom message for lang field
+            'lang.in' => 'Invalid language selected',
+        ]);
+
+
+        if($validator->fails()){
+            return response()->json([
+                'status'=>true,
+                'statusCode'=>403,
+                'message' => "success",
+                'errors'=>$validator->errors()->toArray()
+            ]);
+ 
+        }else{
+
+            try{
+                
+                $mediadata = new News();
+                $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', $request->file('file')->getClientOriginalName());
+                $path = $request->file('file')->storeAs('news', $filename, 'public');
+                
+                if($request->hasFile('alternative_image')) {
+                    $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', $request->file('alternative_image')->getClientOriginalName());
+                    $path_alt = $request->file('alternative_image')->storeAs('news', $filename, 'public');
+                    $mediadata->alternative_image = $path_alt;
+                }
+               
+                $mediadata->file = $path;
+                $mediadata->heading = $request->heading;
+                $mediadata->alt_tag = $request->alt_tag;
+                $mediadata->cdn = $request->cdn;
+                $mediadata->type = $request->type;
+                $mediadata->date = $request->date;
+                $mediadata->lang = $request->lang;
+                
+                if($mediadata->save()){              
+                    return response()->json([
+                        'status'=>true,
+                        'statusCode'=>200,
+                        'message'=>"news Added Sucessfully ",
+                        'data'=>$mediadata
+                ]);
+                }else{
+                    return response()->json([
+                        'status'=>true,
+                        'statusCode'=>400,
+                        'message'=>"Failde to add news "
+                ]);
+                }
+    
+            }catch(\Exception $e){
+                return response()->json([
+                    'status'=>false,
+                    'statusCode'=>500,
+                    'message'=>"Something went wrong",
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+        
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function show($id)
+    {
+        //
+        $amities = News::find($id);
+          return response()->json([
+            'status'=>true,
+            'statusCode'=>200,
+            'message'=>"success",
+            'data'=>$amities
+            ]);
+    }
+
+
+     
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function edit($id)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, $id)
+    {
+
+        $validator = Validator::make($request->all(),[
+            'file' => ['nullable',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'docs') {
+                        if ($value->getClientOriginalExtension() !== "pdf") {
+                            $fail('Only PDF files are allowed.');
+                        }
+                    } else {
+                        if (!in_array($value->getClientOriginalExtension(), ['png', 'jpg', 'jpeg', 'webp'])) {
+                            $fail('Invalid file type. Only allowed: png, jpg, jpeg, webp.');
+                        }
+                    }
+                },
+            'max:2048'],
+
+           'alternative_image' => ['nullable',
+                function ($attribute, $value, $fail) use ($request) {
+                    if ($request->type === 'docs') {
+                        if ($value->getClientOriginalExtension() !== "pdf") {
+                            $fail('Only PDF files are allowed.');
+                        }
+                    } else {
+                        if (!in_array($value->getClientOriginalExtension(), ['png', 'jpg', 'jpeg'])) {
+                            $fail('Invalid file type. Only allowed: png, jpg, jpeg');
+                        }
+                    }
+                },
+            'max:2048'],
+            'type' => 'required|in:logo,docs,news',
+            // 'heading' => [
+            //     'required',
+            //     Rule::unique('news')->whereNull('deleted_at')
+            //     ->ignore($id),
+            // ],
+            'heading' => 'required',
+            'lang' => 'required_if:type,news|in:hindi,english',
+        ],
+        [
+            // 'file.required' => 'This field is required.',
+            'file.mimes' => 'Invalid file type only aloowed (png,jpg,jpeg,webp)',
+            'alternative_image.mimes' => 'Invalid file type only aloowed (png,jpg,jpeg )',
+            'heading.required' => 'This heading field is required.',
+            // 'heading.unique' => 'heading Already Exists.',
+            'type.in' => 'Invalid type selected.',
+            'lang.required_if' => 'This field is required',
+            'lang.in' => 'Invalid language selected'
+        ]);
+
+        if($validator->fails()){
+            return response()->json([
+                'status'=>true,
+                'statusCode'=>403,
+                'message' => "success",
+                'errors'=>$validator->errors()->toArray()
+            ]);
+        }
+        $getrecord = News::select('*')->where('id',$id)->first();
+        
+        if(!$getrecord){
+            return response()->json([
+                'status'=>false,
+                'statusCode'=>500,
+               'message' =>"Invalid Request/ Not Found ",
+            ]);
+        }
+
+      
+        if($request->file('file')){
+          
+            $imagesurl=str_replace(env('ASSET_URL'), "",$getrecord->file);
+            dltSingleImgFile($imagesurl);
+            
+            $name = now()->timestamp."-{$request->file->getClientOriginalName()}";
+            $path = $request->file('file')->storeAs('news', $name, 'public');
+            $getrecord->file=$path;
+        }
+
+        if($request->file('alternative_image')){
+          
+            $imagesurl = str_replace(env('ASSET_URL'), "",$getrecord->alternative_image);
+            dltSingleImgFile($imagesurl);
+            
+            $filename = time() . '_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', $request->file('alternative_image')->getClientOriginalName());
+            $path = $request->file('alternative_image')->storeAs('news', $name, 'public');
+            $getrecord->alternative_image = $path;
+        }
+
+
+        $getrecord->heading = $request->heading;
+        $getrecord->alt_tag = $request->alt_tag;
+        $getrecord->cdn = $request->cdn;
+        $getrecord->type = $request->type;
+        $getrecord->lang = $request->lang;
+        
+        if($request->date) {            
+            $getrecord->date = $request->date;
+        }
+        
+        if($getrecord->save()){
+            return response()->json([
+                'status' => true,
+                'statusCode' => 200,
+                'message' => "Updated Sucessfully ",
+                'data' => $getrecord
+            ]);
+        }
+
+        return response()->json([
+            'status'=>false,
+            'statusCode'=>500,
+           'message' =>"Invalid Request/ Not Found ",
+        ]);
+        // return $getrecord;
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+       
+        $getrecord = News::select('*')->where('id',$id)->first();
+        
+        if(!$getrecord){
+            return response()->json([
+                'status'=>false,
+                'statusCode'=>500,
+               'message' =>"Invalid Request/ Not Found ",
+            ]);
+        }
+
+         dltSingleImgFile($getrecord->image);
+
+         if($getrecord->delete()){
+            return response()->json([
+                'status'=>true,
+                'statusCode'=>200,
+                'message'=>"Deleted Sucessfully ",
+                'data'=>$getrecord
+
+            ]);
+         }
+         return response()->json([
+            'status'=>false,
+            'statusCode'=>500,
+           'message' =>"Invalid Request/ Not Found ",
+        ]);
+        
+    }
+
+
+    public function status(Request $request, $id)
+    {
+        $table = [
+            'tableName' => 'news',
+            'keyColumnName' => 'id',
+            'keyColumnId' => $id,
+            'updateColumnName' => 'status',
+            'updatecolumnVal' => $request->status
+        ];
+        
+        $result = updateSingleRecord($table);
+        return $result;
+    }
+
+
+}
